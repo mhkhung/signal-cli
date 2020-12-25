@@ -32,6 +32,7 @@ public class RegisterCommand implements LocalCommand {
             return 1;
         } catch (IOException e) {
             System.err.println("Request verify error: " + e.getMessage());
+            e.printStackTrace();
             return 3;
         }
     }
