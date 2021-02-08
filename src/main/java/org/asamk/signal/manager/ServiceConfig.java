@@ -83,16 +83,38 @@ public class ServiceConfig {
         }
         capabilities = new AccountAttributes.Capabilities(false, zkGroupAvailable, false, zkGroupAvailable);
 
-        return new SignalServiceConfiguration(new SignalServiceUrl[]{new SignalServiceUrl(props.getProperty("URL", SIGNAL_ORG_URL), TRUST_STORE)},
-                makeSignalCdnUrlMapFor(new SignalCdnUrl[]{new SignalCdnUrl(props.getProperty("CDN_URL", SIGNAL_ORG_CDN_URL), TRUST_STORE)},
-                        new SignalCdnUrl[]{new SignalCdnUrl(props.getProperty("CDN2_URL", SIGNAL_ORG_CDN2_URL), TRUST_STORE)}),
-                new SignalContactDiscoveryUrl[]{new SignalContactDiscoveryUrl(props.getProperty("SIGNAL_CONTACT_DISCOVERY_URL", SIGNAL_ORG_SIGNAL_CONTACT_DISCOVERY_URL),
-                        TRUST_STORE)},
-                new SignalKeyBackupServiceUrl[]{new SignalKeyBackupServiceUrl(props.getProperty("SIGNAL_KEY_BACKUP_URL", SIGNAL_ORG_SIGNAL_KEY_BACKUP_URL), TRUST_STORE)},
-                new SignalStorageUrl[]{new SignalStorageUrl(props.getProperty("STORAGE_URL", SIGNAL_ORG_STORAGE_URL), TRUST_STORE)},
-                interceptors,
-                dns,
-                zkGroupServerPublicParams);
+
+        SignalServiceConfiguration signalServiceConfiguration;
+        if (props.getProperty("URL") != null) {
+            // Custom
+            signalServiceConfiguration = new SignalServiceConfiguration(new SignalServiceUrl[]{new SignalServiceUrl(props.getProperty("URL"), null)},
+                    makeSignalCdnUrlMapFor(new SignalCdnUrl[]{new SignalCdnUrl(props.getProperty("CDN_URL"), null)}, 
+                    new SignalCdnUrl[]{new SignalCdnUrl(props.getProperty("CDN2_URL"), null)}),
+            
+                    new SignalContactDiscoveryUrl[]{new SignalContactDiscoveryUrl(props.getProperty("SIGNAL_CONTACT_DISCOVERY_URL"), null)},
+                    new SignalKeyBackupServiceUrl[]{new SignalKeyBackupServiceUrl(props.getProperty("SIGNAL_KEY_BACKUP_URL"), null)},
+
+                    new SignalStorageUrl[]{new SignalStorageUrl(props.getProperty("STORAGE_URL"), null)},
+
+                    interceptors,
+                    dns,
+                    zkGroupServerPublicParams);
+        }
+        else {
+            signalServiceConfiguration = new SignalServiceConfiguration(new SignalServiceUrl[]{new SignalServiceUrl(SIGNAL_ORG_URL, TRUST_STORE)},
+            makeSignalCdnUrlMapFor(new SignalCdnUrl[]{new SignalCdnUrl(SIGNAL_ORG_CDN_URL, TRUST_STORE)},
+                    new SignalCdnUrl[]{new SignalCdnUrl(SIGNAL_ORG_CDN2_URL, TRUST_STORE)}),
+            
+                    new SignalContactDiscoveryUrl[]{new SignalContactDiscoveryUrl(SIGNAL_ORG_SIGNAL_CONTACT_DISCOVERY_URL, TRUST_STORE)},
+                    new SignalKeyBackupServiceUrl[]{new SignalKeyBackupServiceUrl(SIGNAL_ORG_SIGNAL_KEY_BACKUP_URL, TRUST_STORE)},
+
+                    new SignalStorageUrl[]{new SignalStorageUrl(props.getProperty("STORAGE_URL", SIGNAL_ORG_STORAGE_URL), TRUST_STORE)},
+
+                    interceptors,
+                    dns,
+                    zkGroupServerPublicParams);
+        }
+        return signalServiceConfiguration;
     }
 
     public static AccountAttributes.Capabilities getCapabilities() {

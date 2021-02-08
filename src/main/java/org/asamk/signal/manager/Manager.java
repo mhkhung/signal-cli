@@ -377,6 +377,12 @@ public class Manager implements Closeable {
                 discoverableByPhoneNumber);
     }
 
+    public void setProfile(String name, String avatarBase64, String mime) throws IOException {
+        try (final StreamDetails streamDetails = avatarBase64 == null ? null : Utils.createStreamDetailsFromBase64(avatarBase64, mime)) {
+            accountManager.setVersionedProfile(account.getUuid(), account.getProfileKey(), name, streamDetails);
+        }
+    }
+
     public void setProfile(String name, File avatar) throws IOException {
         try (final StreamDetails streamDetails = avatar == null ? null : Utils.createStreamDetailsFromFile(avatar)) {
             accountManager.setVersionedProfile(account.getUuid(), account.getProfileKey(), name, streamDetails);
@@ -1363,7 +1369,7 @@ public class Manager implements Closeable {
                     missingUuids.stream().map(a -> a.getNumber().get()).collect(Collectors.toSet()),
                     CDS_MRENCLAVE);
         } catch (IOException | Quote.InvalidQuoteFormatException | UnauthenticatedQuoteException | SignatureException | UnauthenticatedResponseException e) {
-            System.err.println("Failed to resolve uuids from server: " + e.getMessage());
+            System.err.println("Failed to resolve uuids from server: CDS not used");
             registeredUsers = new HashMap<>();
         }
 

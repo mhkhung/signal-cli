@@ -18,6 +18,7 @@ import org.whispersystems.signalservice.internal.push.http.ResumableUploadSpec;
 import org.whispersystems.util.Base64;
 
 import java.io.BufferedInputStream;
+import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
@@ -96,6 +97,17 @@ class Utils {
                 null,
                 null,
                 resumableUploadSpec);
+    }
+
+    static StreamDetails createStreamDetailsFromBase64(String base64, String mime) throws IOException {
+        byte [] avatar = Base64.decode(base64);
+
+        InputStream stream = new ByteArrayInputStream(avatar);
+        final long size = avatar.length;
+        if (mime == null) {
+            mime = "application/octet-stream";
+        }
+        return new StreamDetails(stream, mime, size);
     }
 
     static StreamDetails createStreamDetailsFromFile(File file) throws IOException {
