@@ -25,14 +25,16 @@ import java.security.cert.CertificateException;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 
 import okhttp3.Dns;
 import okhttp3.Interceptor;
 
 public class ServiceConfig {
 
-    final static byte[] UNIDENTIFIED_SENDER_TRUST_ROOT = Base64.getDecoder()
+    final static byte[] SIGNAL_ORG_UNIDENTIFIED_SENDER_TRUST_ROOT = Base64.getDecoder()
             .decode("BXu6QIKVz5MA8gstzfOgRQGqyLqOwNKHL6INkv3IHWMF");
+    static byte [] UNIDENTIFIED_SENDER_TRUST_ROOT = SIGNAL_ORG_UNIDENTIFIED_SENDER_TRUST_ROOT;
     final static int PREKEY_MINIMUM_COUNT = 20;
     final static int PREKEY_BATCH_SIZE = 100;
     final static int MAX_ATTACHMENT_SIZE = 150 * 1024 * 1024;
@@ -40,7 +42,6 @@ public class ServiceConfig {
     final static long AVATAR_DOWNLOAD_FAILSAFE_MAX_SIZE = 10 * 1024 * 1024;
 
     final static String CDS_MRENCLAVE = "c98e00a4e3ff977a56afefe7362a27e4961e4f19e211febfbb19b897e6b80b15";
-
     final static String KEY_BACKUP_ENCLAVE_NAME = "fe7c1bfae98f9b073d220366ea31163ee82f6d04bead774f71ca8e5c40847bfe";
     final static byte[] KEY_BACKUP_SERVICE_ID = Hex.decode(
             "fe7c1bfae98f9b073d220366ea31163ee82f6d04bead774f71ca8e5c40847bfe");
@@ -57,12 +58,26 @@ public class ServiceConfig {
 
     private final static Optional<Dns> dns = Optional.absent();
 
-    private final static byte[] zkGroupServerPublicParams = Base64.getDecoder()
+    private final static byte[] SIGNAL_ORG_zkGroupServerPublicParams = Base64.getDecoder()
             .decode("AMhf5ywVwITZMsff/eCyudZx9JDmkkkbV6PInzG4p8x3VqVJSFiMvnvlEKWuRob/1eaIetR31IYeAbm0NdOuHH8Qi+Rexi1wLlpzIo1gstHWBfZzy1+qHRV5A4TqPp15YzBPm0WSggW6PbSn+F4lf57VCnHF7p8SvzAA2ZZJPYJURt8X7bbg+H3i+PEjH9DXItNEqs2sNcug37xZQDLm7X0=");
+    private static byte[] zkGroupServerPublicParams = SIGNAL_ORG_zkGroupServerPublicParams;
 
-    static final AccountAttributes.Capabilities capabilities;
+    static AccountAttributes.Capabilities capabilities;
 
-    static {
+    public static SignalServiceConfiguration createDefaultServiceConfiguration(String userAgent, Properties props) {
+        final Interceptor userAgentInterceptor = chain -> chain.proceed(chain.request()
+                .newBuilder()
+                .header("User-Agent", userAgent)
+                .build());
+
+        final List<Interceptor> interceptors = List.of(userAgentInterceptor);
+
+        if (props.getProperty("UNIDENTIFIED_SENDER_TRUST_ROOT") != null) {
+            UNIDENTIFIED_SENDER_TRUST_ROOT = Base64.getDecoder().decode(props.getProperty("UNIDENTIFIED_SENDER_TRUST_ROOT"));
+        }
+        if (props.getProperty("zkGroupServerPublicParamsHex") != null) {
+            zkGroupServerPublicParams = Base64.getDecoder().decode(props.getProperty("zkGroupServerPublicParamsHex"));
+        }
         boolean zkGroupAvailable;
         try {
             new ServerPublicParams(zkGroupServerPublicParams);
@@ -71,17 +86,10 @@ public class ServiceConfig {
             zkGroupAvailable = false;
         }
         capabilities = new AccountAttributes.Capabilities(false, zkGroupAvailable, false, zkGroupAvailable);
-    }
 
-    public static SignalServiceConfiguration createDefaultServiceConfiguration(String userAgent) {
-        final Interceptor userAgentInterceptor = chain -> chain.proceed(chain.request()
-                .newBuilder()
-                .header("User-Agent", userAgent)
-                .build());
-
-        final List<Interceptor> interceptors = List.of(userAgentInterceptor);
-
-        return new SignalServiceConfiguration(new SignalServiceUrl[]{new SignalServiceUrl(URL, TRUST_STORE)},
+        SignalServiceConfiguration signalServiceConfiguration;
+        if (props.getProperty("URL") == null) {
+            signalServiceConfiguration = new SignalServiceConfiguration(new SignalServiceUrl[]{new SignalServiceUrl(URL, TRUST_STORE)},
                 makeSignalCdnUrlMapFor(new SignalCdnUrl[]{new SignalCdnUrl(CDN_URL, TRUST_STORE)},
                         new SignalCdnUrl[]{new SignalCdnUrl(CDN2_URL, TRUST_STORE)}),
                 new SignalContactDiscoveryUrl[]{new SignalContactDiscoveryUrl(SIGNAL_CONTACT_DISCOVERY_URL,
@@ -91,6 +99,20 @@ public class ServiceConfig {
                 interceptors,
                 dns,
                 zkGroupServerPublicParams);
+        }
+        else {
+            signalServiceConfiguration = new SignalServiceConfiguration(new SignalServiceUrl[]{new SignalServiceUrl(props.getProperty("URL"), null)},
+                makeSignalCdnUrlMapFor(new SignalCdnUrl[]{new SignalCdnUrl(props.getProperty("CDN_URL"), null)},
+                        new SignalCdnUrl[]{new SignalCdnUrl(props.getProperty("CDN2_URL"), null)}),
+                new SignalContactDiscoveryUrl[]{new SignalContactDiscoveryUrl(props.getProperty("SIGNAL_CONTACT_DISCOVERY_URL"),
+                        null)},
+                new SignalKeyBackupServiceUrl[]{new SignalKeyBackupServiceUrl(props.getProperty("SIGNAL_KEY_BACKUP_URL"), null)},
+                new SignalStorageUrl[]{new SignalStorageUrl(props.getProperty("STORAGE_URL"), null)},
+                interceptors,
+                dns,
+                zkGroupServerPublicParams);
+        }
+        return signalServiceConfiguration;
     }
 
     public static AccountAttributes.Capabilities getCapabilities() {

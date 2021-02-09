@@ -10,6 +10,7 @@ import org.whispersystems.signalservice.api.util.StreamDetails;
 import org.whispersystems.signalservice.api.util.UuidUtil;
 
 import java.io.BufferedInputStream;
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -17,6 +18,7 @@ import java.io.InputStream;
 import java.io.InvalidObjectException;
 import java.net.URLConnection;
 import java.nio.file.Files;
+import java.util.Base64;
 
 public class Utils {
 
@@ -31,6 +33,17 @@ public class Utils {
             return defaultMimeType;
         }
         return mime;
+    }
+
+    public static StreamDetails createStreamDetailsFromBase64(String base64, String mime) throws IOException {
+        byte [] avatar = Base64.getDecoder().decode(base64);
+
+        InputStream stream = new ByteArrayInputStream(avatar);
+        final long size = avatar.length;
+        if (mime == null) {
+            mime = "application/octet-stream";
+        }
+        return new StreamDetails(stream, mime, size);
     }
 
     public static StreamDetails createStreamDetailsFromFile(File file) throws IOException {

@@ -44,7 +44,7 @@ public class Main {
         System.exit(res);
     }
 
-    private static void installSecurityProviderWorkaround() {
+    public static void installSecurityProviderWorkaround() {
         // Register our own security provider
         Security.insertProviderAt(new SecurityProvider(), 1);
         Security.addProvider(new BouncyCastleProvider());
@@ -64,7 +64,7 @@ public class Main {
         return ns.getBoolean("verbose");
     }
 
-    private static void configureLogging(final boolean verbose) {
+    public static void configureLogging(final boolean verbose) {
         if (verbose) {
             System.setProperty("org.slf4j.simpleLogger.defaultLogLevel", "debug");
             System.setProperty("org.slf4j.simpleLogger.showThreadName", "true");

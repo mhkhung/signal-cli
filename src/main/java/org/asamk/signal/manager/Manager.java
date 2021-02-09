@@ -141,6 +141,7 @@ import org.whispersystems.signalservice.internal.util.DynamicCredentialsProvider
 import org.whispersystems.signalservice.internal.util.Hex;
 import org.whispersystems.signalservice.internal.util.Util;
 
+import java.io.ByteArrayInputStream;
 import java.io.Closeable;
 import java.io.File;
 import java.io.FileInputStream;
@@ -156,12 +157,14 @@ import java.nio.file.Files;
 import java.security.SignatureException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
@@ -345,6 +348,27 @@ public class Manager implements Closeable {
                 account.isUnrestrictedUnidentifiedAccess(),
                 capabilities,
                 account.isDiscoverableByPhoneNumber());
+    }
+
+    public void setProfile(String name, String avatarBase64, String mime) throws IOException {
+        try (final StreamDetails streamDetails = avatarBase64 == null ? null : Utils.createStreamDetailsFromBase64(avatarBase64, mime)) {
+            accountManager.setVersionedProfile(account.getUuid(), account.getProfileKey(), name, streamDetails);
+        }
+
+        if (avatarBase64 != null) {
+            byte [] avatar = Base64.getDecoder().decode(avatarBase64);
+            InputStream stream = new ByteArrayInputStream(avatar);
+    
+            avatarStore.storeProfileAvatar(getSelfAddress(),
+                outputStream -> IOUtils.copyStream(stream, outputStream));
+        }
+        else {
+            avatarStore.deleteProfileAvatar(getSelfAddress());
+        }
+        try {
+            sendSyncMessage(SignalServiceSyncMessage.forFetchLatest(SignalServiceSyncMessage.FetchType.LOCAL_PROFILE));
+        } catch (UntrustedIdentityException ignored) {
+        }
     }
 
     /**

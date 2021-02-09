@@ -31,9 +31,11 @@ import org.whispersystems.signalservice.api.util.PhoneNumberFormatter;
 import org.whispersystems.signalservice.internal.configuration.SignalServiceConfiguration;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
@@ -114,8 +116,18 @@ public class App {
             dataPath = getDefaultDataPath();
         }
 
+        Properties prop = new Properties();
+        // Load server config if exists
+        File f = new File(dataPath + "/config.properties");
+        if(f.exists() && !f.isDirectory()) {
+            try {
+                prop.load(new FileInputStream(f.getAbsolutePath()));
+            }
+            catch (IOException ioe) {}
+        }
+
         final SignalServiceConfiguration serviceConfiguration = ServiceConfig.createDefaultServiceConfiguration(
-                BaseConfig.USER_AGENT);
+                BaseConfig.USER_AGENT, prop);
 
         if (!ServiceConfig.getCapabilities().isGv2()) {
             logger.warn("WARNING: Support for new group V2 is disabled,"
