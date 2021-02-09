@@ -276,6 +276,12 @@ public class Manager implements Closeable {
     }
 
     public static Manager init(
+        String username, String settingsPath, SignalServiceConfiguration serviceConfiguration, String userAgent
+    ) throws IOException, NotRegisteredException {
+        return init(username, new File(settingsPath), serviceConfiguration, userAgent);
+    }
+
+    public static Manager init(
             String username, File settingsPath, SignalServiceConfiguration serviceConfiguration, String userAgent
     ) throws IOException, NotRegisteredException {
         PathConfig pathConfig = PathConfig.createDefault(settingsPath);
