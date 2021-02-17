@@ -73,6 +73,12 @@ public class ProvisioningManager {
                 timer);
     }
 
+    public static ProvisioningManager init(
+        String username, String settingsPath, SignalServiceConfiguration serviceConfiguration, String userAgent
+    ) throws IOException, NotRegisteredException {
+        return new ProvisioningManager(new File(settingsPath), serviceConfiguration, userAgent);
+    }
+
     public String getDeviceLinkUri() throws TimeoutException, IOException {
         String deviceUuid = accountManager.getNewDeviceUuid();
 

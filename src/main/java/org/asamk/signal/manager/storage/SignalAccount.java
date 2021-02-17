@@ -391,10 +391,18 @@ public class SignalAccount implements Closeable {
         }
     }
 
-    public void save() {
-        if (fileChannel == null) {
-            return;
+    public String saveToJsonString() {
+        try{
+            String json = new String(getAsJsonByteArrayOutputStream().toByteArray(), "UTF-8");
+            return json;
         }
+        catch(IOException ioe) {
+            logger.error("Error saving json: {}", ioe.getMessage());
+        }
+        return null;
+    }
+
+    private ByteArrayOutputStream getAsJsonByteArrayOutputStream() throws java.io.IOException {
         ObjectNode rootNode = jsonProcessor.createObjectNode();
         rootNode.put("username", username)
                 .put("uuid", uuid == null ? null : uuid.toString())
@@ -417,10 +425,18 @@ public class SignalAccount implements Closeable {
                 .putPOJO("recipientStore", recipientStore)
                 .putPOJO("profileStore", profileStore)
                 .putPOJO("stickerStore", stickerStore);
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        jsonProcessor.writeValue(output, rootNode);
+        return output;
+    }
+
+    public void save() {
+        if (fileChannel == null) {
+            return;
+        }
         try {
-            try (ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            try (ByteArrayOutputStream output = getAsJsonByteArrayOutputStream()) {
                 // Write to memory first to prevent corrupting the file in case of serialization errors
-                jsonProcessor.writeValue(output, rootNode);
                 ByteArrayInputStream input = new ByteArrayInputStream(output.toByteArray());
                 synchronized (fileChannel) {
                     fileChannel.position(0);

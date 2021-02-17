@@ -11,6 +11,7 @@ import org.asamk.signal.manager.util.IOUtils;
 import org.signal.storageservice.protos.groups.AccessControl;
 import org.signal.storageservice.protos.groups.GroupChange;
 import org.signal.storageservice.protos.groups.Member;
+import org.signal.storageservice.protos.groups.AccessControl.AccessRequired;
 import org.signal.storageservice.protos.groups.local.DecryptedGroup;
 import org.signal.storageservice.protos.groups.local.DecryptedGroupChange;
 import org.signal.storageservice.protos.groups.local.DecryptedGroupJoinInfo;
@@ -100,7 +101,7 @@ public class GroupHelper {
     }
 
     public GroupInfoV2 createGroupV2(
-            String name, Collection<SignalServiceAddress> members, File avatarFile
+            String name, Collection<SignalServiceAddress> members, InputStream avatarFile
     ) throws IOException {
         final byte[] avatarBytes = readAvatarBytes(avatarFile);
         final GroupsV2Operations.NewGroup newGroup = buildNewGroupV2(name, members, avatarBytes);
@@ -117,7 +118,8 @@ public class GroupHelper {
             groupsV2Api.putNewGroup(newGroup, groupAuthForToday);
             decryptedGroup = groupsV2Api.getGroup(groupSecretParams, groupAuthForToday);
         } catch (IOException | VerificationFailedException | InvalidGroupStateException e) {
-            logger.warn("Failed to create V2 group: {}", e.getMessage());
+            logger.warn("Exception creating V2 group: {}", e.getMessage());
+            e.printStackTrace();
             return null;
         }
         if (decryptedGroup == null) {
@@ -133,9 +135,9 @@ public class GroupHelper {
         return g;
     }
 
-    private byte[] readAvatarBytes(final File avatarFile) throws IOException {
+    private byte[] readAvatarBytes(final InputStream avatarFile) throws IOException {
         final byte[] avatarBytes;
-        try (InputStream avatar = avatarFile == null ? null : new FileInputStream(avatarFile)) {
+        try (InputStream avatar = avatarFile == null ? null : avatarFile) {
             avatarBytes = avatar == null ? null : IOUtils.readFully(avatar);
         }
         return avatarBytes;
@@ -195,7 +197,7 @@ public class GroupHelper {
     }
 
     public Pair<DecryptedGroup, GroupChange> updateGroupV2(
-            GroupInfoV2 groupInfoV2, String name, File avatarFile
+            GroupInfoV2 groupInfoV2, String name, InputStream avatarFile
     ) throws IOException {
         final GroupSecretParams groupSecretParams = GroupSecretParams.deriveFromMasterKey(groupInfoV2.getMasterKey());
         GroupsV2Operations.GroupOperations groupOperations = groupsV2Operations.forGroup(groupSecretParams);
@@ -246,6 +248,23 @@ public class GroupHelper {
         return commitChange(groupInfoV2, change);
     }
 
+    public Pair<DecryptedGroup, GroupChange> cycleGroupLinkPassword(
+            GroupInfoV2 groupInfoV2
+    ) throws IOException {
+        final GroupSecretParams groupSecretParams = GroupSecretParams.deriveFromMasterKey(groupInfoV2.getMasterKey());
+        GroupsV2Operations.GroupOperations groupOperations = groupsV2Operations.forGroup(groupSecretParams);
+
+        GroupChange.Actions.Builder change = 
+            groupOperations.createModifyGroupLinkPasswordAndRightsChange(GroupLinkPassword.createNew().serialize(), AccessRequired.ANY);
+
+        final Optional<UUID> uuid = this.selfAddressProvider.getSelfAddress().getUuid();
+        if (uuid.isPresent()) {
+            change.setSourceUuid(UuidUtil.toByteString(uuid.get()));
+        }
+
+        return commitChange(groupInfoV2, change);
+    }
+    
     public Pair<DecryptedGroup, GroupChange> leaveGroup(GroupInfoV2 groupInfoV2) throws IOException {
         List<DecryptedPendingMember> pendingMembersList = groupInfoV2.getGroup().getPendingMembersList();
         final UUID selfUuid = selfAddressProvider.getSelfAddress().getUuid().get();
@@ -325,6 +344,13 @@ public class GroupHelper {
         final GroupSecretParams groupSecretParams = GroupSecretParams.deriveFromMasterKey(groupInfoV2.getMasterKey());
         final GroupsV2Operations.GroupOperations groupOperations = groupsV2Operations.forGroup(groupSecretParams);
         return commitChange(groupInfoV2, groupOperations.createRemoveMembersChange(uuids));
+    }
+
+    public Pair<DecryptedGroup, GroupChange> setInvitePassword(GroupInfoV2 groupInfoV2, String invitePassword) throws IOException {
+        final GroupSecretParams groupSecretParams = GroupSecretParams.deriveFromMasterKey(groupInfoV2.getMasterKey());
+        final GroupsV2Operations.GroupOperations groupOperations = groupsV2Operations.forGroup(groupSecretParams);
+        System.out.println("setInvitePassword: " + invitePassword);
+        return commitChange(groupInfoV2, groupOperations.createModifyGroupLinkPasswordAndRightsChange(invitePassword.getBytes("UTF-8"), AccessControl.AccessRequired.ANY));
     }
 
     private Pair<DecryptedGroup, GroupChange> commitChange(

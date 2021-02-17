@@ -49,6 +49,28 @@ public class GroupInfoV2 extends GroupInfo {
         return this.group.getTitle();
     }
 
+    public String getAccessControlAddFromInviteLink() {
+        if (this.group == null) {
+            return null;
+        }
+        switch (this.group.getAccessControl().getAddFromInviteLink()) {
+			case ADMINISTRATOR:
+				return "ADMINISTRATOR";
+			case ANY:
+                return "ANY";
+			case MEMBER:
+				return "MEMBER";
+			case UNKNOWN:
+				return "UNKNOWN";
+			case UNRECOGNIZED:
+				return "UNRECOGNIZED";
+			case UNSATISFIABLE:
+                return "UNSATISFIABLE";
+			default:
+                return "unknown";
+        }
+    }
+
     @Override
     public GroupInviteLinkUrl getGroupInviteLink() {
         if (this.group == null || this.group.getInviteLinkPassword() == null || (

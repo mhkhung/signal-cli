@@ -76,6 +76,12 @@ public class RegistrationManager implements Closeable {
     }
 
     public static RegistrationManager init(
+        String username, String settingsPath, SignalServiceConfiguration serviceConfiguration, String userAgent
+    ) throws IOException, NotRegisteredException {
+        return init(username, new File(settingsPath), serviceConfiguration, userAgent);
+    }
+
+    public static RegistrationManager init(
             String username, File settingsPath, SignalServiceConfiguration serviceConfiguration, String userAgent
     ) throws IOException {
         PathConfig pathConfig = PathConfig.createDefault(settingsPath);
@@ -182,6 +188,13 @@ public class RegistrationManager implements Closeable {
                 account.isUnrestrictedUnidentifiedAccess(),
                 ServiceConfig.capabilities,
                 account.isDiscoverableByPhoneNumber());
+    }
+
+    /**
+     * get Account store as json
+     */
+    public String getAccount() {
+        return account.saveToJsonString();
     }
 
     @Override

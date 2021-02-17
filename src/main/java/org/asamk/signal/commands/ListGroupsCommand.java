@@ -9,10 +9,12 @@ import org.asamk.signal.OutputType;
 import org.asamk.signal.manager.Manager;
 import org.asamk.signal.manager.groups.GroupInviteLinkUrl;
 import org.asamk.signal.manager.storage.groups.GroupInfo;
+import org.asamk.signal.manager.storage.groups.GroupInfoV2;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.whispersystems.signalservice.api.push.SignalServiceAddress;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -67,32 +69,58 @@ public class ListGroupsCommand implements LocalCommand {
         return Set.of(OutputType.PLAIN_TEXT, OutputType.JSON);
     }
 
+    static public String saveToJsonString(final Manager m, GroupInfo group) throws IOException {
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        final JsonWriter jsonWriter = new JsonWriter(bos);
+        final GroupInviteLinkUrl groupInviteLink = group.getGroupInviteLink();
+
+        JsonGroup g = new JsonGroup(group.getGroupId().toBase64(),
+                group.getTitle(),
+                group.isMember(m.getSelfAddress()),
+                group.isBlocked(),
+                resolveMembers(m, group.getMembers()),
+                resolveMembers(m, group.getPendingMembers()),
+                resolveMembers(m, group.getRequestingMembers()),
+                (group instanceof GroupInfoV2 ? ((GroupInfoV2)group).getAccessControlAddFromInviteLink() : ""),
+                groupInviteLink == null ? null : groupInviteLink.getUrl());
+        jsonWriter.write(g);
+        return new String(bos.toByteArray(), "UTF-8");
+    }
+
+    static public String saveToJsonString(final Manager m) throws IOException {
+        List<GroupInfo> groups = m.getGroups();
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        final JsonWriter jsonWriter = new JsonWriter(bos);
+
+        List<JsonGroup> jsonGroups = new ArrayList<>();
+        for (GroupInfo group : groups) {
+            final GroupInviteLinkUrl groupInviteLink = group.getGroupInviteLink();
+
+            jsonGroups.add(new JsonGroup(group.getGroupId().toBase64(),
+                    group.getTitle(),
+                    group.isMember(m.getSelfAddress()),
+                    group.isBlocked(),
+                    resolveMembers(m, group.getMembers()),
+                    resolveMembers(m, group.getPendingMembers()),
+                    resolveMembers(m, group.getRequestingMembers()),
+                    (group instanceof GroupInfoV2 ? ((GroupInfoV2)group).getAccessControlAddFromInviteLink() : ""),
+                    groupInviteLink == null ? null : groupInviteLink.getUrl()));
+        }
+
+        jsonWriter.write(jsonGroups);
+        return new String(bos.toByteArray(), "UTF-8");
+    }
+
     @Override
     public int handleCommand(final Namespace ns, final Manager m) {
         if (ns.get("output") == OutputType.JSON) {
-            final JsonWriter jsonWriter = new JsonWriter(System.out);
-
-            List<JsonGroup> jsonGroups = new ArrayList<>();
-            for (GroupInfo group : m.getGroups()) {
-                final GroupInviteLinkUrl groupInviteLink = group.getGroupInviteLink();
-
-                jsonGroups.add(new JsonGroup(group.getGroupId().toBase64(),
-                        group.getTitle(),
-                        group.isMember(m.getSelfAddress()),
-                        group.isBlocked(),
-                        resolveMembers(m, group.getMembers()),
-                        resolveMembers(m, group.getPendingMembers()),
-                        resolveMembers(m, group.getRequestingMembers()),
-                        groupInviteLink == null ? null : groupInviteLink.getUrl()));
-            }
-
             try {
-                jsonWriter.write(jsonGroups);
+                String s = saveToJsonString(m);
+                System.out.println(s);
             } catch (IOException e) {
                 logger.error("Failed to write json object: {}", e.getMessage());
                 return 3;
             }
-
             return 0;
         } else {
             boolean detailed = ns.getBoolean("detailed");
@@ -114,6 +142,7 @@ public class ListGroupsCommand implements LocalCommand {
         public Set<String> members;
         public Set<String> pendingMembers;
         public Set<String> requestingMembers;
+        public String groupInviteAccessControl;
         public String groupInviteLink;
 
         public JsonGroup(
@@ -124,6 +153,7 @@ public class ListGroupsCommand implements LocalCommand {
                 Set<String> members,
                 Set<String> pendingMembers,
                 Set<String> requestingMembers,
+                String groupInviteAccessControl,
                 String groupInviteLink
         ) {
             this.id = id;
@@ -134,6 +164,7 @@ public class ListGroupsCommand implements LocalCommand {
             this.members = members;
             this.pendingMembers = pendingMembers;
             this.requestingMembers = requestingMembers;
+            this.groupInviteAccessControl = groupInviteAccessControl;
             this.groupInviteLink = groupInviteLink;
         }
     }

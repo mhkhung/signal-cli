@@ -6,17 +6,23 @@ import org.asamk.signal.manager.Manager;
 import org.asamk.signal.manager.groups.GroupId;
 import org.asamk.signal.manager.groups.GroupNotFoundException;
 import org.asamk.signal.manager.groups.NotAGroupMemberException;
+import org.asamk.signal.manager.groups.GroupIdFormatException;
 import org.asamk.signal.manager.storage.groups.GroupInfo;
 import org.asamk.signal.util.ErrorUtils;
+import org.asamk.signal.util.Util;
 import org.freedesktop.dbus.exceptions.DBusExecutionException;
 import org.whispersystems.libsignal.util.Pair;
 import org.whispersystems.signalservice.api.messages.SendMessageResult;
 import org.whispersystems.signalservice.api.push.SignalServiceAddress;
 import org.whispersystems.signalservice.api.util.InvalidNumberException;
 
-import java.io.File;
+import java.io.InputStream;
+import java.io.ByteArrayInputStream;
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -213,6 +219,33 @@ public class DbusSignalImpl implements Signal {
         }
     }
 
+    // Accessible from external code
+    public String updateGroup(String groupIdBase64, String groupName, String [] members, String avatarBase64, boolean enableGroupLink) throws GroupIdFormatException, IOException,
+            GroupNotFoundException, AttachmentInvalidException, NotAGroupMemberException, InvalidNumberException {
+        byte[] groupId = null;
+        InputStream avatarInputStream = null;
+        if (groupIdBase64 != null) {
+            groupId = Util.decodeGroupId(groupIdBase64).serialize();
+        }
+        if (groupName == null) {
+            groupName = "";
+        }
+        ArrayList<String> membersList = null;
+        if (members != null) {
+            membersList = new ArrayList<String>(Arrays.asList(members));
+        }
+        if (avatarBase64 != null) {
+            byte [] avatar = Base64.getDecoder().decode(avatarBase64);
+            avatarInputStream = new ByteArrayInputStream(avatar);
+        }
+        System.out.println("DbusSignalImpl::updateGroup");
+        final Pair<GroupId, List<SendMessageResult>> results = 
+            m.updateGroup(groupId == null ? null : GroupId.unknownVersion(groupId), 
+            groupName, membersList, avatarInputStream, enableGroupLink);
+        checkSendMessageResults(0, results.second());
+        return Base64.getEncoder().encodeToString(results.first().serialize());
+    }
+
     @Override
     public byte[] updateGroup(byte[] groupId, String name, List<String> members, String avatar) {
         try {
@@ -230,7 +263,7 @@ public class DbusSignalImpl implements Signal {
             }
             final Pair<GroupId, List<SendMessageResult>> results = m.updateGroup(groupId == null
                     ? null
-                    : GroupId.unknownVersion(groupId), name, members, avatar == null ? null : new File(avatar));
+                    : GroupId.unknownVersion(groupId), name, members, avatar == null ? null : new FileInputStream(avatar), false);
             checkSendMessageResults(0, results.second());
             return results.first().serialize();
         } catch (IOException e) {

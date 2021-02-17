@@ -17,6 +17,7 @@
 package org.asamk.signal.manager;
 
 import org.asamk.signal.manager.groups.GroupId;
+import org.asamk.signal.manager.groups.GroupIdFormatException;
 import org.asamk.signal.manager.groups.GroupIdV1;
 import org.asamk.signal.manager.groups.GroupIdV2;
 import org.asamk.signal.manager.groups.GroupInviteLinkUrl;
@@ -43,6 +44,7 @@ import org.asamk.signal.manager.util.KeyUtils;
 import org.asamk.signal.manager.util.ProfileUtils;
 import org.asamk.signal.manager.util.StickerUtils;
 import org.asamk.signal.manager.util.Utils;
+import org.asamk.signal.commands.ListGroupsCommand;
 import org.signal.libsignal.metadata.InvalidMetadataMessageException;
 import org.signal.libsignal.metadata.InvalidMetadataVersionException;
 import org.signal.libsignal.metadata.ProtocolDuplicateMessageException;
@@ -180,7 +182,8 @@ public class Manager implements Closeable {
 
     private final static Logger logger = LoggerFactory.getLogger(Manager.class);
 
-    private final CertificateValidator certificateValidator = new CertificateValidator(ServiceConfig.getUnidentifiedSenderTrustRoot());
+    private final CertificateValidator certificateValidator = new CertificateValidator(
+            ServiceConfig.getUnidentifiedSenderTrustRoot());
 
     private final SignalServiceConfiguration serviceConfiguration;
     private final String userAgent;
@@ -202,59 +205,39 @@ public class Manager implements Closeable {
     private final AvatarStore avatarStore;
     private final AttachmentStore attachmentStore;
 
-    Manager(
-            SignalAccount account,
-            PathConfig pathConfig,
-            SignalServiceConfiguration serviceConfiguration,
-            String userAgent
-    ) {
+    Manager(SignalAccount account, PathConfig pathConfig, SignalServiceConfiguration serviceConfiguration,
+            String userAgent) {
         this.account = account;
         this.serviceConfiguration = serviceConfiguration;
         this.userAgent = userAgent;
-        this.groupsV2Operations = capabilities.isGv2() ? new GroupsV2Operations(ClientZkOperations.create(
-                serviceConfiguration)) : null;
+        this.groupsV2Operations = capabilities.isGv2()
+                ? new GroupsV2Operations(ClientZkOperations.create(serviceConfiguration))
+                : null;
         final SleepTimer timer = new UptimeSleepTimer();
-        this.accountManager = new SignalServiceAccountManager(serviceConfiguration,
-                new DynamicCredentialsProvider(account.getUuid(),
-                        account.getUsername(),
-                        account.getPassword(),
-                        account.getSignalingKey(),
-                        account.getDeviceId()),
-                userAgent,
-                groupsV2Operations,
-                timer);
+        this.accountManager = new SignalServiceAccountManager(
+                serviceConfiguration, new DynamicCredentialsProvider(account.getUuid(), account.getUsername(),
+                        account.getPassword(), account.getSignalingKey(), account.getDeviceId()),
+                userAgent, groupsV2Operations, timer);
         this.groupsV2Api = accountManager.getGroupsV2Api();
         final KeyBackupService keyBackupService = ServiceConfig.createKeyBackupService(accountManager);
         this.pinHelper = new PinHelper(keyBackupService);
-        this.clientZkProfileOperations = capabilities.isGv2() ? ClientZkOperations.create(serviceConfiguration)
-                .getProfileOperations() : null;
-        this.messageReceiver = new SignalServiceMessageReceiver(serviceConfiguration,
-                account.getUuid(),
-                account.getUsername(),
-                account.getPassword(),
-                account.getDeviceId(),
-                account.getSignalingKey(),
-                userAgent,
-                null,
-                timer,
-                clientZkProfileOperations);
+        this.clientZkProfileOperations = capabilities.isGv2()
+                ? ClientZkOperations.create(serviceConfiguration).getProfileOperations()
+                : null;
+        this.messageReceiver = new SignalServiceMessageReceiver(serviceConfiguration, account.getUuid(),
+                account.getUsername(), account.getPassword(), account.getDeviceId(), account.getSignalingKey(),
+                userAgent, null, timer, clientZkProfileOperations);
 
         this.account.setResolver(this::resolveSignalServiceAddress);
 
         this.unidentifiedAccessHelper = new UnidentifiedAccessHelper(account::getProfileKey,
-                account.getProfileStore()::getProfileKey,
-                this::getRecipientProfile,
-                this::getSenderCertificate);
+                account.getProfileStore()::getProfileKey, this::getRecipientProfile, this::getSenderCertificate);
         this.profileHelper = new ProfileHelper(account.getProfileStore()::getProfileKey,
                 unidentifiedAccessHelper::getAccessFor,
                 unidentified -> unidentified ? getOrCreateUnidentifiedMessagePipe() : getOrCreateMessagePipe(),
                 () -> messageReceiver);
-        this.groupHelper = new GroupHelper(this::getRecipientProfileKeyCredential,
-                this::getRecipientProfile,
-                account::getSelfAddress,
-                groupsV2Operations,
-                groupsV2Api,
-                this::getGroupAuthForToday);
+        this.groupHelper = new GroupHelper(this::getRecipientProfileKeyCredential, this::getRecipientProfile,
+                account::getSelfAddress, groupsV2Operations, groupsV2Api, this::getGroupAuthForToday);
         this.avatarStore = new AvatarStore(pathConfig.getAvatarsPath());
         this.attachmentStore = new AttachmentStore(pathConfig.getAttachmentsPath());
     }
@@ -275,15 +258,13 @@ public class Manager implements Closeable {
         return account.getDeviceId();
     }
 
-    public static Manager init(
-        String username, String settingsPath, SignalServiceConfiguration serviceConfiguration, String userAgent
-    ) throws IOException, NotRegisteredException {
+    public static Manager init(String username, String settingsPath, SignalServiceConfiguration serviceConfiguration,
+            String userAgent) throws IOException, NotRegisteredException {
         return init(username, new File(settingsPath), serviceConfiguration, userAgent);
     }
 
-    public static Manager init(
-            String username, File settingsPath, SignalServiceConfiguration serviceConfiguration, String userAgent
-    ) throws IOException, NotRegisteredException {
+    public static Manager init(String username, File settingsPath, SignalServiceConfiguration serviceConfiguration,
+            String userAgent) throws IOException, NotRegisteredException {
         PathConfig pathConfig = PathConfig.createDefault(settingsPath);
 
         if (!SignalAccount.userExists(pathConfig.getDataPath(), username)) {
@@ -308,11 +289,8 @@ public class Manager implements Closeable {
             return List.of();
         }
 
-        return Arrays.stream(files)
-                .filter(File::isFile)
-                .map(File::getName)
-                .filter(file -> PhoneNumberFormatter.isValidNumber(file, null))
-                .collect(Collectors.toList());
+        return Arrays.stream(files).filter(File::isFile).map(File::getName)
+                .filter(file -> PhoneNumberFormatter.isValidNumber(file, null)).collect(Collectors.toList());
     }
 
     public void checkAccountState() throws IOException {
@@ -331,11 +309,14 @@ public class Manager implements Closeable {
      * This is used for checking a set of phone numbers for registration on Signal
      *
      * @param numbers The set of phone number in question
-     * @return A map of numbers to booleans. True if registered, false otherwise. Should never be null
-     * @throws IOException if its unable to get the contacts to check if they're registered
+     * @return A map of numbers to booleans. True if registered, false otherwise.
+     *         Should never be null
+     * @throws IOException if its unable to get the contacts to check if they're
+     *                     registered
      */
     public Map<String, Boolean> areUsersRegistered(Set<String> numbers) throws IOException {
-        // Note "contactDetails" has no optionals. It only gives us info on users who are registered
+        // Note "contactDetails" has no optionals. It only gives us info on users who
+        // are registered
         Map<String, UUID> contactDetails = getRegisteredUsers(numbers);
 
         Set<String> registeredUsers = contactDetails.keySet();
@@ -343,32 +324,32 @@ public class Manager implements Closeable {
         return numbers.stream().collect(Collectors.toMap(x -> x, registeredUsers::contains));
     }
 
+    public void setWebhookUrl(String webhookUri) throws IOException {
+        accountManager.setWebhookUrl(webhookUri);
+    }
+
     public void updateAccountAttributes() throws IOException {
         accountManager.setAccountAttributes(account.getSignalingKey(),
-                account.getSignalProtocolStore().getLocalRegistrationId(),
-                true,
+                account.getSignalProtocolStore().getLocalRegistrationId(), true,
                 // set legacy pin only if no KBS master key is set
                 account.getPinMasterKey() == null ? account.getRegistrationLockPin() : null,
                 account.getPinMasterKey() == null ? null : account.getPinMasterKey().deriveRegistrationLock(),
-                account.getSelfUnidentifiedAccessKey(),
-                account.isUnrestrictedUnidentifiedAccess(),
-                capabilities,
+                account.getSelfUnidentifiedAccessKey(), account.isUnrestrictedUnidentifiedAccess(), capabilities,
                 account.isDiscoverableByPhoneNumber());
     }
 
     public void setProfile(String name, String avatarBase64, String mime) throws IOException {
-        try (final StreamDetails streamDetails = avatarBase64 == null ? null : Utils.createStreamDetailsFromBase64(avatarBase64, mime)) {
+        try (final StreamDetails streamDetails = avatarBase64 == null ? null
+                : Utils.createStreamDetailsFromBase64(avatarBase64, mime)) {
             accountManager.setVersionedProfile(account.getUuid(), account.getProfileKey(), name, streamDetails);
         }
 
         if (avatarBase64 != null) {
-            byte [] avatar = Base64.getDecoder().decode(avatarBase64);
+            byte[] avatar = Base64.getDecoder().decode(avatarBase64);
             InputStream stream = new ByteArrayInputStream(avatar);
-    
-            avatarStore.storeProfileAvatar(getSelfAddress(),
-                outputStream -> IOUtils.copyStream(stream, outputStream));
-        }
-        else {
+
+            avatarStore.storeProfileAvatar(getSelfAddress(), outputStream -> IOUtils.copyStream(stream, outputStream));
+        } else {
             avatarStore.deleteProfileAvatar(getSelfAddress());
         }
         try {
@@ -378,12 +359,12 @@ public class Manager implements Closeable {
     }
 
     /**
-     * @param avatar if avatar is null the image from the local avatar store is used (if present),
-     *               if it's Optional.absent(), the avatar will be removed
+     * @param avatar if avatar is null the image from the local avatar store is used
+     *               (if present), if it's Optional.absent(), the avatar will be
+     *               removed
      */
     public void setProfile(String name, Optional<File> avatar) throws IOException {
-        try (final StreamDetails streamDetails = avatar == null
-                ? avatarStore.retrieveProfileAvatar(getSelfAddress())
+        try (final StreamDetails streamDetails = avatar == null ? avatarStore.retrieveProfileAvatar(getSelfAddress())
                 : avatar.isPresent() ? Utils.createStreamDetailsFromFile(avatar.get()) : null) {
             accountManager.setVersionedProfile(account.getUuid(), account.getProfileKey(), name, streamDetails);
         }
@@ -404,9 +385,12 @@ public class Manager implements Closeable {
     }
 
     public void unregister() throws IOException {
-        // When setting an empty GCM id, the Signal-Server also sets the fetchesMessages property to false.
-        // If this is the master device, other users can't send messages to this number anymore.
-        // If this is a linked device, other users can still send messages, but this device doesn't receive them anymore.
+        // When setting an empty GCM id, the Signal-Server also sets the fetchesMessages
+        // property to false.
+        // If this is the master device, other users can't send messages to this number
+        // anymore.
+        // If this is a linked device, other users can still send messages, but this
+        // device doesn't receive them anymore.
         accountManager.setGcmId(Optional.absent());
 
         account.setRegistered(false);
@@ -437,11 +421,8 @@ public class Manager implements Closeable {
         IdentityKeyPair identityKeyPair = getIdentityKeyPair();
         String verificationCode = accountManager.getNewDeviceVerificationCode();
 
-        accountManager.addDevice(deviceIdentifier,
-                deviceKey,
-                identityKeyPair,
-                Optional.of(account.getProfileKey().serialize()),
-                verificationCode);
+        accountManager.addDevice(deviceIdentifier, deviceKey, identityKeyPair,
+                Optional.of(account.getProfileKey().serialize()), verificationCode);
         account.setMultiDevice(true);
         account.save();
     }
@@ -451,8 +432,7 @@ public class Manager implements Closeable {
             throw new RuntimeException("Only master device can set a PIN");
         }
         if (pin.isPresent()) {
-            final MasterKey masterKey = account.getPinMasterKey() != null
-                    ? account.getPinMasterKey()
+            final MasterKey masterKey = account.getPinMasterKey() != null ? account.getPinMasterKey()
                     : KeyUtils.createMasterKey();
 
             pinHelper.setRegistrationLockPin(pin.get(), masterKey);
@@ -516,42 +496,26 @@ public class Manager implements Closeable {
 
     private SignalServiceMessageSender createMessageSender() {
         final ExecutorService executor = null;
-        return new SignalServiceMessageSender(serviceConfiguration,
-                account.getUuid(),
-                account.getUsername(),
-                account.getPassword(),
-                account.getDeviceId(),
-                account.getSignalProtocolStore(),
-                userAgent,
-                account.isMultiDevice(),
-                Optional.fromNullable(messagePipe),
-                Optional.fromNullable(unidentifiedMessagePipe),
-                Optional.absent(),
-                clientZkProfileOperations,
-                executor,
+        return new SignalServiceMessageSender(serviceConfiguration, account.getUuid(), account.getUsername(),
+                account.getPassword(), account.getDeviceId(), account.getSignalProtocolStore(), userAgent,
+                account.isMultiDevice(), Optional.fromNullable(messagePipe),
+                Optional.fromNullable(unidentifiedMessagePipe), Optional.absent(), clientZkProfileOperations, executor,
                 ServiceConfig.MAX_ENVELOPE_SIZE);
     }
 
-    private SignalProfile getRecipientProfile(
-            SignalServiceAddress address
-    ) {
+    private SignalProfile getRecipientProfile(SignalServiceAddress address) {
         return getRecipientProfile(address, false);
     }
 
-    private SignalProfile getRecipientProfile(
-            SignalServiceAddress address, boolean force
-    ) {
+    private SignalProfile getRecipientProfile(SignalServiceAddress address, boolean force) {
         SignalProfileEntry profileEntry = account.getProfileStore().getProfileEntry(address);
         if (profileEntry == null) {
             return null;
         }
         long now = new Date().getTime();
         // Profiles are cached for 24h before retrieving them again
-        if (!profileEntry.isRequestPending() && (
-                force
-                        || profileEntry.getProfile() == null
-                        || now - profileEntry.getLastUpdateTimestamp() > 24 * 60 * 60 * 1000
-        )) {
+        if (!profileEntry.isRequestPending() && (force || profileEntry.getProfile() == null
+                || now - profileEntry.getLastUpdateTimestamp() > 24 * 60 * 60 * 1000)) {
             profileEntry.setRequestPending(true);
             final SignalServiceProfile encryptedProfile;
             try {
@@ -566,8 +530,8 @@ public class Manager implements Closeable {
 
             final ProfileKey profileKey = profileEntry.getProfileKey();
             final SignalProfile profile = decryptProfileAndDownloadAvatar(address, profileKey, encryptedProfile);
-            account.getProfileStore()
-                    .updateProfile(address, profileKey, now, profile, profileEntry.getProfileKeyCredential());
+            account.getProfileStore().updateProfile(address, profileKey, now, profile,
+                    profileEntry.getProfileKeyCredential());
             return profile;
         }
         return profileEntry.getProfile();
@@ -590,19 +554,17 @@ public class Manager implements Closeable {
 
             long now = new Date().getTime();
             final ProfileKeyCredential profileKeyCredential = profileAndCredential.getProfileKeyCredential().orNull();
-            final SignalProfile profile = decryptProfileAndDownloadAvatar(address,
-                    profileEntry.getProfileKey(),
+            final SignalProfile profile = decryptProfileAndDownloadAvatar(address, profileEntry.getProfileKey(),
                     profileAndCredential.getProfile());
-            account.getProfileStore()
-                    .updateProfile(address, profileEntry.getProfileKey(), now, profile, profileKeyCredential);
+            account.getProfileStore().updateProfile(address, profileEntry.getProfileKey(), now, profile,
+                    profileKeyCredential);
             return profileKeyCredential;
         }
         return profileEntry.getProfileKeyCredential();
     }
 
-    private SignalProfile decryptProfileAndDownloadAvatar(
-            final SignalServiceAddress address, final ProfileKey profileKey, final SignalServiceProfile encryptedProfile
-    ) {
+    private SignalProfile decryptProfileAndDownloadAvatar(final SignalServiceAddress address,
+            final ProfileKey profileKey, final SignalServiceProfile encryptedProfile) {
         if (encryptedProfile.getAvatar() != null) {
             downloadProfileAvatar(address, encryptedProfile.getAvatar(), profileKey);
         }
@@ -619,7 +581,8 @@ public class Manager implements Closeable {
         return Optional.of(AttachmentUtils.createAttachment(streamDetails, Optional.absent()));
     }
 
-    private Optional<SignalServiceAttachmentStream> createContactAvatarAttachment(SignalServiceAddress address) throws IOException {
+    private Optional<SignalServiceAttachmentStream> createContactAvatarAttachment(SignalServiceAddress address)
+            throws IOException {
         final StreamDetails streamDetails = avatarStore.retrieveContactAvatar(address);
         if (streamDetails == null) {
             return Optional.absent();
@@ -654,9 +617,13 @@ public class Manager implements Closeable {
         return account.getGroupStore().getGroups();
     }
 
-    public Pair<Long, List<SendMessageResult>> sendGroupMessage(
-            String messageText, List<String> attachments, GroupId groupId
-    ) throws IOException, GroupNotFoundException, AttachmentInvalidException, NotAGroupMemberException {
+    public String listGroups() throws IOException {
+        return ListGroupsCommand.saveToJsonString(this);
+    }
+
+    public Pair<Long, List<SendMessageResult>> sendGroupMessage(String messageText, List<String> attachments,
+            GroupId groupId)
+            throws IOException, GroupNotFoundException, AttachmentInvalidException, NotAGroupMemberException {
         final SignalServiceDataMessage.Builder messageBuilder = SignalServiceDataMessage.newBuilder()
                 .withBody(messageText);
         if (attachments != null) {
@@ -666,28 +633,32 @@ public class Manager implements Closeable {
         return sendGroupMessage(messageBuilder, groupId);
     }
 
-    public Pair<Long, List<SendMessageResult>> sendGroupMessageReaction(
-            String emoji, boolean remove, String targetAuthor, long targetSentTimestamp, GroupId groupId
-    ) throws IOException, InvalidNumberException, NotAGroupMemberException, GroupNotFoundException {
-        SignalServiceDataMessage.Reaction reaction = new SignalServiceDataMessage.Reaction(emoji,
-                remove,
-                canonicalizeAndResolveSignalServiceAddress(targetAuthor),
-                targetSentTimestamp);
+    public Pair<Long, List<SendMessageResult>> sendGroupMessageReaction(String emoji, boolean remove,
+            String targetAuthor, long targetSentTimestamp, GroupId groupId)
+            throws IOException, InvalidNumberException, NotAGroupMemberException, GroupNotFoundException {
+        SignalServiceDataMessage.Reaction reaction = new SignalServiceDataMessage.Reaction(emoji, remove,
+                canonicalizeAndResolveSignalServiceAddress(targetAuthor), targetSentTimestamp);
         final SignalServiceDataMessage.Builder messageBuilder = SignalServiceDataMessage.newBuilder()
                 .withReaction(reaction);
 
         return sendGroupMessage(messageBuilder, groupId);
     }
 
-    public Pair<Long, List<SendMessageResult>> sendGroupMessage(
-            SignalServiceDataMessage.Builder messageBuilder, GroupId groupId
-    ) throws IOException, GroupNotFoundException, NotAGroupMemberException {
+    public Pair<Long, List<SendMessageResult>> sendGroupMessage(SignalServiceDataMessage.Builder messageBuilder,
+            GroupId groupId) throws IOException, GroupNotFoundException, NotAGroupMemberException {
         final GroupInfo g = getGroupForSending(groupId);
 
         GroupUtils.setGroupContext(messageBuilder, g);
         messageBuilder.withExpiration(g.getMessageExpirationTime());
 
         return sendMessage(messageBuilder, g.getMembersWithout(account.getSelfAddress()));
+    }
+
+    public void quitGroup(String group) throws GroupIdFormatException, GroupNotFoundException, IOException,
+            NotAGroupMemberException {
+        final GroupId groupId = org.asamk.signal.util.Util.decodeGroupId(group);
+        this.sendQuitGroupMessage(groupId);
+        return;
     }
 
     public Pair<Long, List<SendMessageResult>> sendQuitGroupMessage(GroupId groupId) throws GroupNotFoundException, IOException, NotAGroupMemberException {
@@ -714,16 +685,16 @@ public class Manager implements Closeable {
     }
 
     public Pair<GroupId, List<SendMessageResult>> updateGroup(
-            GroupId groupId, String name, List<String> members, File avatarFile
+            GroupId groupId, String name, List<String> members, InputStream avatarFile, boolean enableGroupLink
     ) throws IOException, GroupNotFoundException, AttachmentInvalidException, InvalidNumberException, NotAGroupMemberException {
         return sendUpdateGroupMessage(groupId,
                 name,
                 members == null ? null : getSignalServiceAddresses(members),
-                avatarFile);
+                avatarFile, enableGroupLink);
     }
 
     private Pair<GroupId, List<SendMessageResult>> sendUpdateGroupMessage(
-            GroupId groupId, String name, Collection<SignalServiceAddress> members, File avatarFile
+            GroupId groupId, String name, Collection<SignalServiceAddress> members, InputStream avatarFile, boolean enableGroupLink
     ) throws IOException, GroupNotFoundException, AttachmentInvalidException, NotAGroupMemberException {
         GroupInfo g;
         SignalServiceDataMessage.Builder messageBuilder;
@@ -741,7 +712,7 @@ public class Manager implements Closeable {
             } else {
                 if (avatarFile != null) {
                     avatarStore.storeGroupAvatar(gv2.getGroupId(),
-                            outputStream -> IOUtils.copyFileToStream(avatarFile, outputStream));
+                            outputStream -> IOUtils.copyStream(avatarFile, outputStream));
                 }
                 messageBuilder = getGroupUpdateMessageBuilder(gv2, null);
                 g = gv2;
@@ -773,17 +744,25 @@ public class Manager implements Closeable {
                                 groupGroupChangePair.second());
                     }
                 }
-                if (result == null || name != null || avatarFile != null) {
+                
+                if (result == null || (name != null && name.length() > 0) || avatarFile != null) {
                     Pair<DecryptedGroup, GroupChange> groupGroupChangePair = groupHelper.updateGroupV2(groupInfoV2,
                             name,
                             avatarFile);
                     if (avatarFile != null) {
                         avatarStore.storeGroupAvatar(groupInfoV2.getGroupId(),
-                                outputStream -> IOUtils.copyFileToStream(avatarFile, outputStream));
+                                outputStream -> IOUtils.copyStream(avatarFile, outputStream));
                     }
                     result = sendUpdateGroupMessage(groupInfoV2,
                             groupGroupChangePair.first(),
                             groupGroupChangePair.second());
+                }
+
+                if (enableGroupLink) {
+                    Pair<DecryptedGroup, GroupChange> groupGroupChangePair = groupHelper.cycleGroupLinkPassword(groupInfoV2);
+                    result = sendUpdateGroupMessage(groupInfoV2,
+                        groupGroupChangePair.first(),
+                        groupGroupChangePair.second());
                 }
 
                 return new Pair<>(group.getGroupId(), result.second());
@@ -806,7 +785,7 @@ public class Manager implements Closeable {
             final GroupInfoV1 g,
             final String name,
             final Collection<SignalServiceAddress> members,
-            final File avatarFile
+            final InputStream avatarFile
     ) throws IOException {
         if (name != null) {
             g.name = name;
@@ -835,8 +814,20 @@ public class Manager implements Closeable {
 
         if (avatarFile != null) {
             avatarStore.storeGroupAvatar(g.getGroupId(),
-                    outputStream -> IOUtils.copyFileToStream(avatarFile, outputStream));
+                    outputStream -> IOUtils.copyStream(avatarFile, outputStream));
         }
+    }
+
+    public String joinGroup(String uri) throws GroupInviteLinkUrl.InvalidGroupLinkException, GroupInviteLinkUrl.UnknownGroupLinkVersionException,
+            IOException, GroupLinkNotActiveException {
+        final GroupInviteLinkUrl linkUrl = GroupInviteLinkUrl.fromUri(uri);
+        if (linkUrl == null) {
+            throw new GroupInviteLinkUrl.InvalidGroupLinkException("Link is not a signal group invitation link");
+        }
+        final Pair<GroupId, List<SendMessageResult>> results = this.joinGroup(linkUrl);
+        GroupId newGroupId = results.first();
+        final GroupInfo groupInfo = this.getGroup(newGroupId);
+        return ListGroupsCommand.saveToJsonString(this, groupInfo);
     }
 
     public Pair<GroupId, List<SendMessageResult>> joinGroup(
@@ -2508,6 +2499,13 @@ public class Manager implements Closeable {
         }
 
         return account.getRecipientStore().resolveServiceAddress(address);
+    }
+
+    /**
+     * get Account store as json
+     */
+    public String getAccount() {
+        return account.saveToJsonString();
     }
 
     @Override
